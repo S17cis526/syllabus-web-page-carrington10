@@ -6,82 +6,135 @@
  * simple photo gallery web app.
  */
 var http = require('http');
+var Url = require('url');
 var fs = require('fs');
-var port = 4000;
- var stylesheet = fs.readFileSync('gallery.css');
-function getImageNames(callback){
+var port = 8000;
+var title =  'Gallery';
+var config = (fs.readFileSync('config.json'));
 
-   fs.readdir('images/',function(err,fileNames){
-           if(err)
-           {
-              callback(err,null);
-           }// if err
-           else {
-               calback(false,fileNames);
-           }// end of if we have our iles name
+var stylesheet = fs.readFileSync('gallery.css');
 
-   });// end of read dir
-} // end of getImageNames
+var imageNames = ['ace.jpg', 'bubble.jpg', 'chess.jpg', 'fern.jpg', 'mobile.jpg'];
 
-function imageNamestoretags(fileNames){
-    fileNames.map(function(filename){
-
-    return'<img src="' + filename +'" alt="a fishing ace at work">'
+function getImageNames(callback) {
+  fs.readdir('images/', function(err, fileNames) {
+    if (err) callback(err, undefined);
+    else callback(false, fileNames);
+  });
 }
-  }// end of store tags
- var imageNames = ['ace.jpg','fern.jpg', 'chess.jpg']
+
+function imageNamesToTags(fileNames) {
+  return fileNames.map(function(fileName) {
+    return `<img src="${fileName}" alt="${fileName}">`;
+  });
+}
+
 function serveImage(filename, req, res) {
-  fs.readFile('images/' + filename , function(err, data) {
+  fs.readFile('images/' + filename, function(err, body) {
     if (err) {
       console.error(err);
-      res.statusCode =404;
-      res.statusMessage = "Resource not found";
-      res.end()
-      return;;
+      res.statusCode == 500;
+      res.statusMessage = "Whoops";
+      return;
     }
     res.setHeader("Content-Type", "image/jpeg");
     res.end(body);
   });
-}//
-buildGallery(imageTags){
-  var html = '<!doctype' ;
-  html+= '<head><Title> Gallery</title>'
-  html+= '<link href= "gallery.css" rel="stylesheet" type="text/css">'
-  html+= '</head>';
-  html+='<body>';
-  html+='<h1>Gallery </h1>';
- html+= imageNamestoretags(imageTags).join('');
-  html+= '<h1>Hello.</h1> Time is ' + Date.now();
-  html+='</body>';
+}
+
+function buildGallery(imageTags) {
+  var html =  '<!DOCTYPE html>';
+      html += '<head>';
+      html += '<title>'+ config.title + '</title>';
+      html += '<link rel="stylesheet" type="text/css" href="gallery.css">';
+      html += '</head>';
+      html += '<body>';
+        html += '<h1>Gallery</h1>';
+        html+= '<form action="">'
+        html+= ' <input type="text"text" name="tltle">';
+        html+= ' <input type="submit" value="Change Gallery Title">'
+        html+='</form>'
+        html += imageNamesToTags(imageTags).join('');
+        html+= '<form action="" method="POST">';
+        html+= '<input type="file" name="image">'
+        html+=' <input type="submit" value="Upload Image">'
+        html+= '</form>'
+      html += '</body>';
+
   return html;
-}; // builds page
-serveGallery(req,res){
-getImageNames(function(err,imageNames){
+}
 
-  if(err) {
-    console.error(err)
-    res.statusCode = 500;
-    res.statusMessage = 'Server error';
-    res.end
-    return;
-  }// end of err
-  res.setHeader('Content-Type','text/html');
-  res.end(buildGallery(imageNames));
-});// end of call back function
+function serveGallery(req, res) {
+  getImageNames(function(err, imageNames) {
+    if (err) {
+      console.error(err);
+      res.statusCode = 500;
+      res.statusMessage = 'Server error';
+      res.end();
+      return;
+    }
+    res.setHeader('Content-Type', 'text/html');
+    res.end(buildGallery(imageNames));
+  })
+}
+ function uploadImage(req ,res) {
+req.on('error', function(){
+  var body;
+  res.statusCode = 500;
+  res.end();
 
-} // end of serve galler invoe
+});
+ req.on('data', function(data){
+   body+= data;
+ })
+ req.on('end',function(){
+   fs.writeFile('filename',data, function(err){
+      if(err)
+      {
+        console.log(err)
+      }
+      res.statusCode = 500;
+      res.end()
+      return;
+   });
+   serveGallery(req,res);
+ });
+
+ }// end of upload pic
 var server = http.createServer((req, res) => {
 
-  switch (req.url) {
-    case '/':
-    case '/gallery':
-    serveGallery()
-    break;
-      case '/gallery.css':
-      res.setHeader('Content-type','text/css')
+  var Urlparts = Url.parse(req.url);
+var url = req.url.split('?'); // at most we should have 2 question marks
+// a resource and a query string separated by a?
+var resource = url[0];
+var queryString = url[1];
+var url;
+
+if(Urlparts.query)
+{
+  var matches= /title=(.+)($|&)/.exec(Urlparts.query);
+  if(matches&& matches[1]){
+    config.title = decodeURIComponent(matches[1]);
+    fs.writeFile('config.json',JSON.stringify(config) });
+  }// en dof if statement
+}
+  switch (Urlparts.pathname) {
+    case "/":
+    case "/gallery":
+    if(req.method == 'GET') {
+      serveGallery()
+    }
+    else if (req.method == 'POST'){
+      uploadPicture(req,res);
+      }
+      serveGallery(req, res);
+      break;
+    case "/gallery.css":
+      res.setHeader('Content-Type', 'text/css');
       res.end(stylesheet);
+      break;
     default:
-    serverImage(res.url,req,res);
+      serveImage(req.url, req, res);
   }
 
 });
