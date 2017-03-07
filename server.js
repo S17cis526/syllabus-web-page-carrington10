@@ -7,38 +7,24 @@
 
 /* global variables */
 var multipart = require('./multipart');
+var template = require('./template');
+var staticFiles = require('./static');
 var http = require('http');
 var url = require('url');
 var fs = require('fs');
-var port = 3000;
+var port = 5000;
 
 /* load cached files */
 var config = JSON.parse(fs.readFileSync('config.json'));
-var stylesheet = fs.readFileSync('gallery.css');
-var globalJ = {}
-function getJson(req,res)
-{
-  fs.readdir('loadj', function(err,items) {
-    if(err) {handleError(req, res, err); return;}
-    else if(stats.isFile()) files.push(jsonloads)
-    toProcess--;// end of to process
-    var toProcess = jsonloads.length;
-    var jsonloads = [];
-    if(toProcess == 0) printContents(jsonloads);
-  })// end of read dir function
-}
+var stylesheet = fs.readFileSync('public/gallery.css');
+var script = fs.readFileSync('public/gallery.js');
 
-function printContents(filename)
-{
-  var contents = fs.readFileSync("loadj/filename.json")
-  console.log("starting pham  ")
-  var jsonContent = JSON.parse(contents)
-  console.log("Title",jsonContent.Url);
-  console.log("Title:",jsonContent.Title);
-  console.log("About:",jsonContent.Description);
-  console.log("Date:",jsonContent.Date);
-  console.log("done");
-}// end of print Contents
+/* load public directory */
+staticFiles.loadDir('public');
+
+/* load templates */
+template.loadDir('templates');
+
 /** @function getImageNames
  * Retrieves the filenames for all images in the
  * /images directory and supplies them to the callback.
@@ -66,55 +52,37 @@ function imageNamesToTags(fileNames) {
 }
 
 /**
- * @function buildIndex
+ * @function buildGallery
  * A helper function to build an HTML string
  * of a gallery webpage.
- * @param {string[]} anchors - the HTML for the individual
+ * @param {string[]} imageTags - the HTML for the individual
  * gallery images.
  */
- function buildJson(contents){
-    var html = '<doctype html';
-    html+="<h1>" +contents.Title + "</h1>";
-    html+="<body>" +contents.Description ;
-    html+="       " + contents.Date ;
-    html+="</body>";
-    return html;
-
- }//
-function buildIndex(anchors) {
-  var html =  '<!doctype html>';
-      html += '<head>';
-      html +=   '<title>' + config.title + '</title>';
-      html +=   '<link href="gallery.css" rel="stylesheet" type="text/css">'
-      html += '</head>';
-      html += '<body>';
-      html += '  <h1>' + config.title + '</h1>';
-      html += '  <form method="GET" action="">';
-      html += '    <input type="text" name="title">';
-      html += '    <input type="submit" value="Change Gallery Title">';
-      html += '  </form>';
-      html += anchors.join('');
-      html += ' <form action="" method="POST" enctype="multipart/form-data">';
-      html += '   <input type="file" name="image">';
-      html += '   <input type="submit" value="Upload Image">';
-      html += ' </form>';
-      html += '</body>';
-  return html;
+function buildGallery(imageTags) {
+  return template.render('gallery.html', {
+    title: config.title,
+    imageTags: imageNamesToTags(imageTags).join('')
+  });
 }
 
-/** @function serveIndex
+/** @function serveGallery
  * A function to serve a HTML page representing a
  * gallery of images.
  * @param {http.incomingRequest} req - the request object
  * @param {http.serverResponse} res - the response object
  */
-function serveIndex(req, res) {
-  var anchors = Object.getKeys(globalJ).map(function(key){
-    buildJson(globalj[key];)
-    return '<a href="'+globalj[key].Title+ '"><img src="' + globalj[key].Url + '"></a>"';
+function serveGallery(req, res) {
+  getImageNames(function(err, imageNames){
+    if(err) {
+      console.error(err);
+      res.statusCode = 500;
+      res.statusMessage = 'Server error';
+      res.end();
+      return;
+    }
+    res.setHeader('Content-Type', 'text/html');
+    res.end(buildGallery(imageNames));
   });
-  res.setHeader('Content-Type', 'text/html');
-  res.end(buildIndex(anchors));
 }
 
 /** @function serveImage
@@ -147,7 +115,6 @@ function serveImage(fileName, req, res) {
 function uploadImage(req, res) {
   multipart(req, res, function(req, res) {
     // make sure an image was uploaded
-    console.log('filename', req.body.filename)
     if(!req.body.image.filename) {
       console.error("No file in upload");
       res.statusCode = 400;
@@ -189,19 +156,20 @@ function handleRequest(req, res) {
 
   switch(urlParts.pathname) {
     case '/':
-    case '/index':
+    case '/gallery':
       if(req.method == 'GET') {
-        serveIndex(req, res);
+        serveGallery(req, res);
       } else if(req.method == 'POST') {
         uploadImage(req, res);
       }
       break;
-    case '/gallery.css':
-      res.setHeader('Content-Type', 'text/css');
-      res.end(stylesheet);
-      break;
+
     default:
-      serveImage(req.url, req, res);
+    console.log(req.url);
+      if(staticFiles.isCached('public' + req.url)) {
+        staticFiles.serveFile('public' + req.url, req, res);
+      }
+      else serveImage(req.url, req, res);
   }
 }
 
